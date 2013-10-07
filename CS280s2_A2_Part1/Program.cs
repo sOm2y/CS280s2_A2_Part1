@@ -1,9 +1,22 @@
-﻿using System;
+﻿/*********************************************
+ * 
+ * CS280s2_A2_Part2
+ * Author:Yue Yin
+ * UPI:yyin888
+ * student ID:5398177
+ * Date:
+ * ----------DO NOT COPY THE CODE-----------
+ * 
+ *********************************************/
+using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Reflection;
 using System.Text;
 using System.Threading.Tasks;
+
 
 
 namespace CS280s2_A2_Part1
@@ -19,98 +32,196 @@ namespace CS280s2_A2_Part1
         }
         private void getTrans()
         {
+            int recordCount=0;
+            int errorCount = 0;
+            int creditCount = 0;
+            int debitCount = 0;
+            StreamReader sr = new StreamReader(@"..\..\..\..\Transactions.txt");
+            StreamWriter error = new StreamWriter(@"..\..\..\..\ErrorFile.txt", false);
+            StreamWriter debit = new StreamWriter(@"..\..\..\..\DebitFile.txt", false, System.Text.Encoding.Default);
+            StreamWriter credit = new StreamWriter(@"..\..\..\..\CreditFile.txt", false, System.Text.Encoding.Default);
 
             try
             {
-                using (StreamReader sr = new StreamReader(@"Transactions.txt"))
+                double Num;             
+                String readFromFile = sr.ReadToEnd();               
+                string[] fileData = readFromFile.Split('\n');
+                List<string> fullFile = new List<string>();
+                List<string> errorFile = new List<string>();
+                
+                foreach (string e in fileData)
                 {
-                    String readFromFile = sr.ReadToEnd();
-                    StreamWriter error = new StreamWriter("errorTransaction.txt", false);
-                    try
+                    if (fileData.Length - 1 == recordCount) { break; }
+                    string[] curTemp = e.Split(',');
+                    recordCount++;
+                    /* All
+                     * Truncated record (i.e. having less than four fields)
+                     */
+                    if (curTemp.Length < 4)
                     {
-                      
-                        string[] fileData = readFromFile.Split('\n');
-                        //   List<Transaction> list = new List<Transaction>(fileData.Length);
-                        for (int i = 0; i < fileData.Length; i++)
-                        {
-                            string[] transData = fileData[i].Split(',');
-                            if (transData.Length < 4)
-                            {
-                              
-                                error.WriteLine(fileData[i].ToString());
-                            }
-                            else
-                            {
-                              
-                                    for (int j = 0; j < transData.Length; j++)
-                                    {
-
-                                        transData[j] = transData[j].Trim();
-                                      
-                                        
-                                    }
-                                
-                            }
-
-
-                        }
+                        errorFile.Add(e);
+                        errorCount++;
+                        // fullFile.Remove(e);
+                        Console.WriteLine("Record " + recordCount + ": ERROR - HAVING LESS THAN FOUR FIELDS.");
+                        continue;
                     }
-                    catch (Exception e)
+                    else if (curTemp[3].Trim().Length <= 1 || curTemp[2].Trim().Length <= 1 ||
+                        curTemp[1].Trim().Length <= 1 || curTemp[0].Trim().Length <= 1)
                     {
-                    }
-                    finally
-                    {
-                        error.Close();
+                        errorFile.Add(e);
+                        errorCount++;
+                        Console.WriteLine("Record " + recordCount + ": ERROR - FIELDS MAY NULL.");                        
+                        continue;
                     }
 
-                    //foreach (Transaction t in list) {
-                    //     Console.WriteLine(t.toString());
-                    //  }
+                    /* Client Number
+                     * Invalid check digit 
+                     */
+                    else if (!isLuhn(curTemp[0].Trim()))
+                    {
+                        errorFile.Add(e);
+                        errorCount++;
+                        Console.WriteLine("Record " + recordCount + ": ERROR - INVALID CHECK DIGITS.");  
+                        continue;
+                    }
+
+                    /* Transaction Type
+                     * Invalid type code (anything but ‘Cr’ or ‘Dr’)
+                     */
+                    else if (curTemp[1].Trim() != "Cr" && curTemp[1].Trim() != "Dr")
+                    {
+                        errorFile.Add(e);
+                        errorCount++;
+                        Console.WriteLine("Record " + recordCount + ": ERROR - INVALID TRANSACTION TYPE CODE.");  
+                        continue;
+                    }
+
+                    /* Transaction Date Missing 
+                     * Invalid 
+                     * Out of range (before 1 January 2011 or after 31 December 2012)
+                     */
+                    else if (!checkTime(curTemp[2].Trim()))
+                    {
+                        errorFile.Add(e);
+                        errorCount++;
+                        Console.WriteLine("Record " + recordCount + ": ERROR - DATATIME OUT OF RANGE.");  
+                        continue;
+
+                    }
+
+                    /* Transaction Amount
+                     * check non-numeric, Zero,>=5000
+                     * Negative, Missing
+                     */
+                    else if (!double.TryParse(curTemp[3].Trim(), out Num))
+                    {
+                        errorFile.Add(e);
+                        errorCount++;
+                        Console.WriteLine("Record " + recordCount + ": ERROR - TRANSACTION AMOUNT NON-NUMERIC."); 
+                        continue;
+                    }
+                    else if (Convert.ToDouble(curTemp[3].Trim()) <= 0 || Convert.ToDouble(curTemp[3].Trim()) >= 5000)
+                    {
+                        errorFile.Add(e);
+                        errorCount++;
+                        Console.WriteLine("Record " + recordCount + ": ERROR - TRANSACTION AMOUNT OUT OF RANGE."); 
+                        continue;
+                    }
+                    fullFile.Add(e);
 
                 }
+
+                foreach (string s in fullFile)
+                {
+                    string[] curTemp = s.Split(',');
+                    if (curTemp[1].Trim() == "Cr")
+                    {
+                        creditCount++;
+                        credit.WriteLine(s);
+                    }
+                    else if (curTemp[1].Trim() == "Dr")
+                    {
+                        debitCount++;
+                        debit.WriteLine(s);
+                    }
+
+                }
+                foreach (string s in errorFile)
+                {
+                    error.WriteLine(s);
+                }
+
             }
             catch (Exception e)
             {
-                //Console.WriteLine("The file could not be read:");
                 Console.WriteLine(e.Message);
+                Console.WriteLine(e.StackTrace.ToString());
+                throw new FileNotFoundException(@"[Transaction.txt not in ..\CS280s2_A2_Part1 directory]", e);
             }
 
-        }
-
-
-    }
-    class Transaction
-    {
-
-
-        int clientNum { get; set; }
-        string transType { get; set; }
-        string transDate { get; set; }
-        int transAmount { get; set; }
-
-        public Transaction(string[] data)
-        {
-            if (data.Length == 4)
+            finally
             {
-                this.clientNum = Convert.ToInt32(data[0].Trim());
-                Console.WriteLine(clientNum);
-                this.transType = data[1].Trim();
-                this.transDate = data[2].Trim();
-                this.transAmount = Convert.ToInt32(data[4].Trim());
+                error.Close();
+                debit.Close();
+                credit.Close();
+                Console.WriteLine("*****************************************************");
+                Console.WriteLine(recordCount+" records have been read.");
+                Console.WriteLine(creditCount+" credit records have been written to credit file.");
+                Console.WriteLine(debitCount+" debit records have been written to debit file.");
+                Console.WriteLine(errorCount + " error records have been written to error file.");
+                Console.WriteLine("*****************************************************");
+
             }
 
 
+
         }
-
-
-        public string toString()
+        private bool isLuhn(string number)
         {
+            int checksum = 0;
+            int[] DELTAS = new int[] { 0, 1, 2, 3, 4, -4, -3, -2, -1, 0 };
+            //var intList = number.Select(digit => int.Parse(digit.ToString()));
+            //int size = intList.Count();
+            // var oddCategories = intList.Where((cat, index) => (index + 1) % 2 != 0);
+            //  var evenCategories = intList.Where((cat, index) => (index + 1) % 2 == 0);
 
-            string s = clientNum.ToString() + transType + transDate + transAmount.ToString();
-            return s;
+            char[] chars = number.ToCharArray();
+            foreach (char c in chars)
+            {
+                //Console.WriteLine(c);
+            }
+
+            for (int i = chars.Length - 1; i > -1; i--)
+            {
+                int j = ((int)chars[i]) - 48;
+                checksum += j;
+
+                if (((i + 1) % 2) == 0)
+                {
+                    checksum += DELTAS[j];
+                }
+            }
+            //   Console.WriteLine(checksum);
+            return ((checksum % 10) == 0);
         }
 
-
+        private bool checkTime(string tempDate)
+        {
+            int dt = 0;
+            try
+            {
+                DateTimeFormatInfo ukDtfi = new CultureInfo("en-GB", false).DateTimeFormat;
+                DateTime checkDate = new DateTime(2011, 1, 1, 0, 0, 0);
+                DateTime curDate = Convert.ToDateTime(tempDate, ukDtfi);
+                dt = DateTime.Compare(curDate, checkDate);
+            }
+            catch (Exception e)
+            {
+                return false;
+            }
+            return (dt > 0);
+        }
 
     }
+
 }
